@@ -1,5 +1,5 @@
 /* Service worker — Chantier PWA : fonctionnement hors ligne */
-const CACHE = 'chantier-v1';
+const CACHE = 'chantier-v2';
 const ASSETS = [
   './',
   './index.html',
