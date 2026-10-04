@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#ff5722">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Chantier">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<title>Chantier — Gestion de travaux</title>
+<style>
+:root{
+  --bg:#f2f4f8;--card:#fff;--ink:#0d1117;--muted:#6b7280;--line:#e6e9ef;--soft:#eef1f6;--field:#fafbfc;
+  --accent:#ff5722;--ok:#16a34a;--warn:#eab308;--bad:#dc2626;--radius:16px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0f14;--card:#151b23;--ink:#eef2f7;--muted:#98a2b3;--line:#232c37;--soft:#222b36;--field:#101620;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{--bg:#0b0f14;--card:#151b23;--ink:#eef2f7;--muted:#98a2b3;--line:#232c37;--soft:#222b36;--field:#101620;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.45;overscroll-behavior-y:none;-webkit-font-smoothing:antialiased}
+button,input,select{font-family:inherit;color:inherit}
+.app{max-width:520px;margin:0 auto;min-height:100vh}
+.topbar{position:sticky;top:0;z-index:30;background:linear-gradient(135deg,#ff7a45,#ff5722 55%,#e64a19);color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 14px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 18px -8px rgba(230,74,25,.8);border-radius:0 0 20px 20px}
+.topbar .logo{width:40px;height:40px;border-radius:13px;background:rgba(255,255,255,.2);display:grid;place-items:center;font-size:20px;flex:none;border:1px solid rgba(255,255,255,.25)}
+.topbar .ttl{flex:1;min-width:0}
+.topbar h1{margin:0;font-size:17px;font-weight:800;letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar p{margin:0;font-size:11.5px;opacity:.85;font-weight:500}
+.icon-btn{width:38px;height:38px;border-radius:12px;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.18);color:#fff;font-size:18px;cursor:pointer;display:grid;place-items:center;flex:none}
+main{padding:16px 14px calc(120px + env(safe-area-inset-bottom))}
+.card{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:0 1px 2px rgba(16,24,40,.05),0 4px 12px -6px rgba(16,24,40,.1);border:1px solid var(--line);margin-bottom:12px}
+.card-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:0}
+.between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.hero{background:linear-gradient(140deg,#ff8a5c,#ff5722 50%,#d84315);color:#fff;border-radius:20px;padding:20px 18px;margin-bottom:12px;box-shadow:0 14px 30px -14px rgba(230,74,25,.9);position:relative;overflow:hidden}
+.hero::after{content:"";position:absolute;right:-40px;top:-50px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.12)}
+.hero-label{font-size:11px;font-weight:700;letter-spacing:.1em;opacity:.9}
+.hero-value{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:4px 0 2px;line-height:1.1}
+.hero-sub{font-size:12.5px;opacity:.88}
+.hero-badge{position:absolute;top:18px;right:18px;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700;z-index:1}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.stat{background:var(--card);border-radius:14px;padding:13px 14px;border:1px solid var(--line)}
+.stat-label{font-size:11.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.04em}
+.stat-value{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-top:4px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none}
+.dot.green{background:var(--ok)}.dot.red{background:var(--bad)}.dot.blue{background:#3b82f6}.dot.orange{background:#f97316}
+.progress{height:10px;border-radius:99px;background:var(--soft);overflow:hidden;margin:10px 0 8px}
+.progress i{display:block;height:100%;border-radius:99px;transition:width .5s cubic-bezier(.3,.8,.3,1)}
+.hint{font-size:12.5px;color:var(--muted)}
+.list{background:var(--card);border-radius:var(--radius);overflow:hidden;border:1px solid var(--line);margin-bottom:12px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid var(--line);cursor:pointer;transition:background .15s}
+.row:last-child{border-bottom:0}
+.row:active{background:var(--soft)}
+.avatar{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;font-size:13px;font-weight:800;flex:none;letter-spacing:-.02em}
+.check{width:40px;height:40px;border-radius:12px;border:2px solid var(--line);background:var(--field);display:grid;place-items:center;flex:none;cursor:pointer;padding:0;font-size:18px;font-weight:800;color:transparent;transition:all .15s}
+.check.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.row-main{flex:1;min-width:0}
+.row-title{font-size:14.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-title.done{text-decoration:line-through;opacity:.55}
+.row-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-amount{font-size:14.5px;font-weight:800;letter-spacing:-.02em;white-space:nowrap}
+.row-amount.paid{color:var(--ok)}
+.badge{display:inline-block;font-size:10px;font-weight:800;padding:2px 7px;border-radius:99px;letter-spacing:.03em;text-transform:uppercase;vertical-align:middle}
+.badge.paid{background:#dcfce7;color:#15803d}
+.badge.late{background:#fee2e2;color:#b91c1c}
+.badge.soon{background:#fef3c7;color:#b45309}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin:18px 4px 8px}
+.section-head h2{font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:0}
+.section-head .sum{font-size:13px;font-weight:800}
+.cat{margin-bottom:12px}.cat:last-child{margin-bottom:0}
+.cat-top{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+.cat-top b{font-weight:700}.cat-top span{color:var(--muted);font-weight:600}
+.cat-bar{height:7px;border-radius:99px;background:var(--soft);overflow:hidden}
+.cat-bar i{display:block;height:100%;border-radius:99px}
+.empty{text-align:center;padding:34px 20px;color:var(--muted)}
+.empty .em{font-size:34px;display:block;margin-bottom:8px;opacity:.6}
+.empty p{margin:0;font-size:13.5px}
+.search{display:flex;gap:8px;margin-bottom:10px}
+.search input{flex:1;padding:12px 14px;border:1.5px solid var(--line);border-radius:13px;font-size:16px;background:var(--card);outline:none}
+.search input:focus{border-color:var(--accent)}
+.chips{display:flex;gap:8px;overflow-x:auto;margin:0 -14px 12px;padding:0 14px 2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:8px 13px;border-radius:99px;border:1.5px solid var(--line);background:var(--card);font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer}
+.chip.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.tabbar{position:fixed;bottom:0;left:0;right:0;z-index:50;background:color-mix(in srgb,var(--card) 94%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+.tabbar-inner{max-width:520px;margin:0 auto;display:flex}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 8px;border:0;background:none;color:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:color .18s}
+.tab svg{width:22px;height:22px;stroke-width:1.9;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
+.tab.active{color:var(--accent)}.tab.active svg{stroke-width:2.3}
+.fab-wrap{position:fixed;left:0;right:0;bottom:calc(78px + env(safe-area-inset-bottom));max-width:520px;margin:0 auto;pointer-events:none;z-index:40}
+.fab{position:absolute;right:16px;width:56px;height:56px;border-radius:50%;border:0;background:linear-gradient(135deg,#ff8a5c,#e64a19);display:grid;place-items:center;pointer-events:auto;cursor:pointer;box-shadow:0 10px 24px -8px rgba(230,74,25,.85);transition:transform .15s}
+.fab:active{transform:scale(.93)}
+.fab svg{width:26px;height:26px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round}
+.backdrop{position:fixed;inset:0;background:rgba(13,17,23,.55);opacity:0;pointer-events:none;transition:opacity .28s;z-index:55;backdrop-filter:blur(2px)}
+.backdrop.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:60;max-width:520px;margin:0 auto;background:var(--card);border-radius:24px 24px 0 0;padding:8px 18px calc(22px + env(safe-area-inset-bottom));transform:translateY(110%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:90vh;overflow-y:auto;box-shadow:0 -10px 40px -12px rgba(13,17,23,.4)}
+.sheet.show{transform:translateY(0)}
+.sheet-handle{width:40px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 14px}
+.sheet-title{font-size:18px;font-weight:800;letter-spacing:-.02em;margin:0 0 16px}
+.field{display:block;margin-bottom:13px}
+.field>span{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em}
+.field input,.field select{width:100%;padding:13px 14px;border:1.5px solid var(--line);border-radius:13px;font-size:16px;background:var(--field);outline:none;appearance:none;-webkit-appearance:none;transition:border-color .15s}
+.field select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.4' stroke-linecap='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 14px center}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.switch{display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:650;margin:4px 0 18px;cursor:pointer;user-select:none;position:relative}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch .track{width:46px;height:27px;border-radius:99px;background:var(--line);position:relative;transition:background .2s;flex:none}
+.switch .track::after{content:"";position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.switch input:checked+.track{background:var(--ok)}
+.switch input:checked+.track::after{transform:translateX(19px)}
+.sheet-actions{display:flex;gap:10px;margin-top:6px}
+.btn{padding:14px 16px;border-radius:13px;border:0;font-size:15px;font-weight:750;cursor:pointer;transition:transform .12s,opacity .15s}
+.btn:active{transform:scale(.97)}
+.btn.primary{background:linear-gradient(135deg,#ff7a45,#e64a19);color:#fff;flex:1;box-shadow:0 8px 18px -8px rgba(230,74,25,.9)}
+.btn.danger{background:#fee2e2;color:#b91c1c}
+.btn.ghost{background:var(--soft);color:var(--ink)}
+.mini-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px}
+.mini-actions .btn{padding:11px;font-size:12.5px;font-weight:700}
+.chip-add{border:1.5px dashed var(--line);background:none;color:var(--muted);width:100%;padding:12px;font-size:13px;font-weight:700;cursor:pointer}
+.chip-add:active{background:var(--soft)}
+.toast{position:fixed;left:14px;right:14px;bottom:calc(92px + env(safe-area-inset-bottom));max-width:492px;margin:0 auto;background:#111827;color:#fff;border-radius:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px;font-weight:600;z-index:70;transform:translateY(20px);opacity:0;pointer-events:none;transition:all .25s}
+.toast.show{transform:none;opacity:1;pointer-events:auto}
+.toast button{background:none;border:0;color:#ff9b73;font-weight:800;font-size:13.5px;cursor:pointer;padding:4px 6px}
+.install{background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;border-radius:16px;padding:14px 16px;margin-bottom:12px;display:none;align-items:center;justify-content:space-between;gap:12px}
+.install.show{display:flex}
+.install b{display:block;font-size:14px}.install span{font-size:12px;opacity:.75}
+.install button{border:0;border-radius:11px;padding:10px 14px;font-weight:800;background:var(--accent);color:#fff;font-size:13px;cursor:pointer;flex:none}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="topbar">
+    <div class="logo">🏗️</div>
+    <div class="ttl">
+      <h1 id="siteName">Chantier</h1>
+      <p>Gestion de mes travaux</p>
+    </div>
+    <button class="icon-btn" id="settingsBtn" aria-label="Réglages">⚙︎</button>
+  </header>
+  <main id="view"></main>
+</div>
+
+<div class="fab-wrap"><button class="fab" id="fab" aria-label="Ajouter"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></div>
+<nav class="tabbar"><div class="tabbar-inner" id="tabbar"></div></nav>
+<div class="backdrop" id="backdrop"></div>
+<div class="sheet" id="sheet"><div class="sheet-handle"></div><div id="sheetContent"></div></div>
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastAct"></button></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script>
+/* =========================================================
+   CHANTIER — Application mobile de gestion de travaux (PWA)
+   Données stockées localement sur l'appareil (localStorage)
+   ========================================================= */
+const KEY = 'chantier_app_v1';
+const CATS = ['Plaquiste','Plomberie','Électricité','Maçonnerie','Peinture','Carrelage','Manœuvres','Transport','Déchetterie','Matériel','Autre'];
+const PALETTE = ['#f97316','#3b82f6','#eab308','#8b5cf6','#ec4899','#14b8a6','#22c55e','#06b6d4','#a855f7','#ef4444','#64748b'];
+
+const $  = (s, el=document) => el.querySelector(s);
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-3);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => (Number(n)||0).toLocaleString('fr-FR', {maximumFractionDigits:2});
+const money = n => fmt(n) + ' ' + (db.devise || 'DA');
+const initials = s => String(s||'?').trim().slice(0,2).toUpperCase();
+const catColor = c => PALETTE[Math.max(0, CATS.indexOf(c)) % PALETTE.length];
+const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+const daysUntil = s => Math.round((new Date(s+'T00:00:00') - new Date(todayStr()+'T00:00:00')) / 86400000);
+
+function dateFr(s){
+  if(!s) return '';
+  const d = new Date(s + 'T00:00:00');
+  return isNaN(d) ? s : d.toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'});
+}
+
+function seed(){
+  const D = (libelle, cat, montant, echeance, paye=false) => ({id:uid(), libelle, cat, montant, echeance, paye});
+  return {
+    nom:'Chantier', devise:'DA', theme:'auto', epargne:0,
+    revenus:[{id:uid(), libelle:'Source de revenu 1', montant:2000000, date:''}],
+    depenses:[
+      D('Plaquiste','Plaquiste',115000,'2026-09-26',true),
+      D('Plomberie — fourniture','Plomberie',17460,'',false),
+      D("Plomberie — main d'œuvre",'Plomberie',79000,'',false),
+      D('Électricité — lot 1','Électricité',62350,'2026-09-19',true),
+      D('Électricité — lot 2','Électricité',12100,'2026-09-19',false),
+      D('Électricité — finitions','Électricité',2800,'2026-09-20',false),
+      D('Carrelage','Carrelage',71980,'',false),
+      D('Maçon','Maçonnerie',0,'',false),
+      D('Peintre','Peinture',0,'',false),
+      D('Manœuvres','Manœuvres',17500,'',false),
+      D('Transport','Transport',7400,'',false),
+      D('Déchetterie','Déchetterie',8500,'',false),
+      D('Montage du matériel plaquiste','Matériel',4000,'',false)
+    ],
+    devis:[
+      {id:uid(), nom:'PLAFOND', type:'materiau', pu:65.44, qte:1500},
+      {id:uid(), nom:'PVC', type:'materiau', pu:14.42, qte:700},
+      {id:uid(), nom:'MUR PLAQUE', type:'materiau', pu:36.66, qte:600},
+      {id:uid(), nom:'PEINTURE MUR + ENDUIT', type:'materiau', pu:122, qte:400},
+      {id:uid(), nom:'SPOT', type:'materiau', pu:250, qte:26},
+      {id:uid(), nom:'MAÇON', type:'mo', pu:150000, qte:1},
+      {id:uid(), nom:'PLOMBIER', type:'mo', pu:150000, qte:1},
+      {id:uid(), nom:'ÉLECTRICIEN', type:'mo', pu:40000, qte:1},
+      {id:uid(), nom:'PEINTRE', type:'mo', pu:400, qte:250}
+    ],
+    avances:[]
+  };
+}
+
+let db, tab = 'home', filter = 'all', query = '';
+
+function normalize(o){
+  const s = seed();
+  const out = Object.assign({}, s, o || {});
+  ['revenus','depenses','devis','avances'].forEach(k => { if(!Array.isArray(out[k])) out[k] = s[k]; });
+  return out;
+}
+function load(){
+  try{ const raw = localStorage.getItem(KEY); if(raw) return normalize(JSON.parse(raw)); }
+  catch(e){ console.warn('Lecture impossible', e); }
+  return seed();
+}
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch(e){ toast('⚠️ Sauvegarde impossible (stockage plein ou bloqué)'); }
+}
+
+const sum = (arr, f) => arr.reduce((s,x)=>s+(+f(x)||0),0);
+const totalRevenus  = () => sum(db.revenus, r=>r.montant);
+const totalDepenses = () => sum(db.depenses, d=>d.montant);
+const totalPaye     = () => sum(db.depenses.filter(d=>d.paye), d=>d.montant);
+const totalDevis    = () => sum(db.devis, d=>(+d.pu||0)*(+d.qte||0));
+const totalAvances  = () => sum(db.avances, a=>a.montant);
+const isLate = d => d.echeance && !d.paye && daysUntil(d.echeance) < 0;
+
+/* ---------- Thème ---------- */
+function applyTheme(){
+  const t = db.theme;
+  if(t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  else document.documentElement.removeAttribute('data-theme');
+  $('#siteName').textContent = db.nom || 'Chantier';
+  document.title = (db.nom || 'Chantier') + ' — Gestion de travaux';
+}
+
+/* ---------- Toast (avec annulation) ---------- */
+let toastTimer, toastUndo;
+function toast(msg, undoFn){
+  $('#toastMsg').textContent = msg;
+  toastUndo = undoFn || null;
+  const b = $('#toastAct');
+  b.textContent = undoFn ? 'Annuler' : '';
+  b.style.display = undoFn ? '' : 'none';
+  $('#toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('#toast').classList.remove('show'), undoFn ? 5000 : 2600);
+}
+$('#toastAct').addEventListener('click', () => {
+  if(toastUndo){ toastUndo(); toastUndo = null; }
+  $('#toast').classList.remove('show');
+});
+
+/* =========================================================
+   RENDU
+   ========================================================= */
+const TABS = [
+  {id:'home', label:'Accueil', icon:'<path d="M3 9.6 12 2.6l9 7V20a1.4 1.4 0 0 1-1.4 1.4H15v-6.2H9v6.2H4.4A1.4 1.4 0 0 1 3 20z"/>'},
+  {id:'dep', label:'Dépenses', icon:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M8.4 13l3.6 3.5 3.6-3.5"/>'},
+  {id:'rev', label:'Revenus', icon:'<circle cx="12" cy="12" r="9"/><path d="M12 16.5v-9M8.4 11l3.6-3.5 3.6 3.5"/>'},
+  {id:'devis', label:'Devis', icon:'<path d="M9 3h6a1 1 0 0 1 1 1v1H8V4a1 1 0 0 1 1-1z"/><path d="M16 5h2a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2"/><path d="M9 12h6M9 16h4"/>'}
+];
+
+function renderTabbar(){
+  $('#tabbar').innerHTML = TABS.map(t => `
+    <button class="tab ${t.id===tab?'active':''}" data-tab="${t.id}">
+      <svg viewBox="0 0 24 24">${t.icon}</svg><span>${t.label}</span>
+    </button>`).join('');
+}
+
+function render(keepScroll){
+  const y = window.scrollY;
+  renderTabbar();
+  const v = $('#view');
+  v.innerHTML = ({home:viewHome, dep:viewDep, rev:viewRev, devis:viewDevis})[tab]();
+  window.scrollTo(0, keepScroll ? y : 0);
+  afterRender();
+}
+
+/* ---------- ACCUEIL ---------- */
+function viewHome(){
+  const R = totalRevenus(), D = totalDepenses(), P = totalPaye(), E = +db.epargne || 0;
+  const solde = R - D - E;
+  const ratio = R > 0 ? D / R : 0;
+  const pct = Math.round(ratio * 100);
+  const color = ratio > 1 ? '#dc2626' : ratio > .8 ? '#f97316' : ratio > .5 ? '#eab308' : '#16a34a';
+  const payePct = D > 0 ? Math.round(P / D * 100) : 0;
+
+  const map = {};
+  db.depenses.forEach(d => { map[d.cat] = (map[d.cat]||0) + (+d.montant||0); });
+  const cats = Object.entries(map).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxCat = cats.length ? cats[0][1] : 1;
+
+  const upcoming = db.depenses.filter(d => !d.paye && d.echeance && +d.montant > 0)
+    .sort((a,b)=>a.echeance.localeCompare(b.echeance)).slice(0,4);
+
+  const lateN = db.depenses.filter(isLate).length;
+
+  return `
+  <div class="install" id="installBox">
+    <div><b>Installer l'application</b><span id="installTxt">Accès rapide depuis l'écran d'accueil</span></div>
+    <button id="installBtn">Installer</button>
+  </div>
+
+  <div class="hero">
+    <div class="hero-badge">${pct} % dépensé</div>
+    <div class="hero-label">LIQUIDITÉS DISPONIBLES</div>
+    <div class="hero-value">${money(solde)}</div>
+    <div class="hero-sub">Revenus − Dépenses${E ? ' − Épargne' : ''}</div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-label"><span class="dot green"></span>Revenus</div><div class="stat-value">${fmt(R)}</div></div>
+    <div class="stat"><div class="stat-label"><span class="dot red"></span>Dépenses</div><div class="stat-value">${fmt(D)}</div></div>
+    <div class="stat"><div class="stat-label"><span class="dot blue"></span>Déjà payé</div><div class="stat-value">${fmt(P)}</div></div>
+    <div class="stat"><div class="stat-label"><span class="dot orange"></span>Reste à payer</div><div class="stat-value">${fmt(D - P)}</div></div>
+  </div>
+
+  ${lateN ? `<div class="card" style="border-color:#fecaca;background:color-mix(in srgb,#dc2626 8%,var(--card))">
+    <b style="color:var(--bad)">⚠️ ${lateN} paiement${lateN>1?'s':''} en retard</b>
+    <div class="hint" data-act="goto-late" style="cursor:pointer;text-decoration:underline;margin-top:2px">Voir les retards</div>
+  </div>` : ''}
+
+  <div class="card">
+    <div class="between" style="margin-bottom:2px">
+      <span class="card-title">Revenu dépensé</span>
+      <strong style="color:${color};font-size:15px">${pct} %</strong>
+    </div>
+    <div class="progress"><i style="width:${Math.min(ratio,1)*100}%;background:${color}"></i></div>
+    <div class="hint">${ratio > 1 ? '⚠️ Dépassement de ' + money(D - R) : 'Marge restante : <b>' + money(R - D) + '</b>'}</div>
+    <div class="progress" style="height:6px;margin-top:14px"><i style="width:${payePct}%;background:var(--ok)"></i></div>
+    <div class="hint">${payePct} % des dépenses réglées</div>
+  </div>
+
+  <div class="card">
+    <div class="between" style="margin-bottom:12px">
+      <span class="card-title">Épargne mensuelle</span>
+      <span style="font-size:12px;color:var(--muted)">déduite du solde</span>
+    </div>
+    <div class="field" style="margin:0"><input type="number" inputmode="decimal" id="epargne" value="${E}" placeholder="0"></div>
+  </div>
+
+  ${upcoming.length ? `
+  <div class="section-head"><h2>Prochaines échéances</h2></div>
+  <div class="list">
+    ${upcoming.map(d => {
+      const n = daysUntil(d.echeance);
+      const tag = n < 0 ? `<span class="badge late">${-n} j de retard</span>` : n <= 7 ? `<span class="badge soon">dans ${n} j</span>` : '';
+      return `<div class="row" data-act="edit-dep" data-id="${d.id}">
+        <div class="avatar" style="background:${catColor(d.cat)}1f;color:${catColor(d.cat)}">${initials(d.cat)}</div>
+        <div class="row-main"><div class="row-title">${esc(d.libelle)}</div>
+        <div class="row-sub">${dateFr(d.echeance)} ${tag}</div></div>
+        <div class="row-amount">${fmt(d.montant)}</div></div>`;
+    }).join('')}
+  </div>` : ''}
+
+  ${cats.length ? `
+  <div class="card">
+    <div class="card-title" style="margin-bottom:14px">Répartition des dépenses</div>
+    ${cats.map(([c,v]) => `
+      <div class="cat">
+        <div class="cat-top"><b>${esc(c)}</b><span>${fmt(v)} · ${Math.round(v/D*100)} %</span></div>
+        <div class="cat-bar"><i style="width:${(v/maxCat*100).toFixed(1)}%;background:${catColor(c)}"></i></div>
+      </div>`).join('')}
+  </div>` : ''}
+
+  <div class="section-head"><h2>Sauvegarde</h2></div>
+  <div class="mini-actions">
+    <button class="btn ghost" data-act="export">⬇︎ Exporter (JSON)</button>
+    <button class="btn ghost" data-act="import">⬆︎ Importer</button>
+    <button class="btn ghost" data-act="csv">📄 Export Excel (CSV)</button>
+    <button class="btn ghost" data-act="reset">↺ Réinitialiser</button>
+  </div>`;
+}
+
+/* ---------- DÉPENSES ---------- */
+function filteredDep(){
+  const q = query.trim().toLowerCase();
+  return db.depenses.filter(d => {
+    if(filter === 'unpaid' && d.paye) return false;
+    if(filter === 'paid' && !d.paye) return false;
+    if(filter === 'late' && !isLate(d)) return false;
+    if(q && !(d.libelle.toLowerCase().includes(q) || d.cat.toLowerCase().includes(q))) return false;
+    return true;
+  }).sort((a,b) => (a.echeance||'9999-99-99').localeCompare(b.echeance||'9999-99-99'));
+}
+
+function viewDep(){
+  const list = filteredDep();
+  const tot = sum(list, d=>d.montant);
+  const FILTERS = [['all','Toutes'],['unpaid','À payer'],['late','En retard'],['paid','Payées']];
+
+  const rowHtml = d => {
+    const n = d.echeance ? daysUntil(d.echeance) : null;
+    const tag = d.paye ? '<span class="badge paid">Payé</span>'
+      : isLate(d) ? '<span class="badge late">En retard</span>'
+      : (n !== null && n <= 7 ? '<span class="badge soon">bientôt</span>' : '');
+    return `<div class="row" data-act="edit-dep" data-id="${d.id}">
+      <button class="check ${d.paye?'on':''}" data-act="toggle-paid" data-id="${d.id}" aria-label="Payé">✓</button>
+      <div class="row-main">
+        <div class="row-title ${d.paye?'done':''}">${esc(d.libelle)}</div>
+        <div class="row-sub">${d.echeance ? dateFr(d.echeance) : 'Sans échéance'} ${tag}</div>
+      </div>
+      <div class="row-amount ${d.paye?'paid':''}">${fmt(d.montant)}</div>
+    </div>`;
+  };
+
+  // Regroupement par catégorie (ordre des catégories, puis tri par échéance déjà appliqué par filteredDep)
+  const groups = {};
+  list.forEach(d => { (groups[d.cat] = groups[d.cat] || []).push(d); });
+  const catsPresent = CATS.filter(c => groups[c]);
+  Object.keys(groups).forEach(c => { if(!catsPresent.includes(c)) catsPresent.push(c); });
+
+  const groupsHtml = catsPresent.map(c => {
+    const items = groups[c];
+    const subtotal = sum(items, d=>d.montant);
+    const color = catColor(c);
+    return `
+      <div class="section-head" style="margin-top:16px">
+        <h2 style="color:${color}">${esc(c)}</h2>
+        <span class="sum">${fmt(subtotal)}</span>
+      </div>
+      <div class="list">${items.map(rowHtml).join('')}</div>`;
+  }).join('');
+
+  return `
+    <div class="card">
+      <div class="between">
+        <span class="card-title">${filter==='all' && !query ? 'Total des dépenses' : 'Total affiché ('+list.length+')'}</span>
+        <strong style="font-size:20px;letter-spacing:-.02em">${money(tot)}</strong>
+      </div>
+    </div>
+    <div class="search"><input id="q" type="search" placeholder="Rechercher une dépense…" value="${esc(query)}"></div>
+    <div class="chips">${FILTERS.map(([k,l]) => `<button class="chip ${filter===k?'active':''}" data-act="filter" data-f="${k}">${l}</button>`).join('')}</div>
+    ${list.length ? groupsHtml
+      : `<div class="card empty"><span class="em">💸</span><p>${db.depenses.length ? 'Aucun résultat.' : 'Aucune dépense enregistrée.<br>Appuyez sur + pour commencer.'}</p></div>`}
+  `;
+}
+
+/* ---------- REVENUS ---------- */
+function viewRev(){
+  const R = totalRevenus();
+  const rows = db.revenus.map(r => `
+    <div class="row" data-act="edit-rev" data-id="${r.id}">
+      <div class="avatar" style="background:#16a34a1f;color:#16a34a">${initials(r.libelle)}</div>
+      <div class="row-main"><div class="row-title">${esc(r.libelle)}</div><div class="row-sub">${r.date ? dateFr(r.date) : 'Revenu mensuel'}</div></div>
+      <div class="row-amount" style="color:var(--ok)">${fmt(r.montant)}</div>
+    </div>`).join('');
+  return `
+    <div class="card"><div class="between"><span class="card-title">Revenu total</span>
+      <strong style="font-size:20px;letter-spacing:-.02em;color:var(--ok)">${money(R)}</strong></div></div>
+    ${db.revenus.length ? `<div class="list">${rows}</div>`
+      : `<div class="card empty"><span class="em">💰</span><p>Aucun revenu enregistré.</p></div>`}`;
+}
+
+/* ---------- DEVIS ---------- */
+function viewDevis(){
+  const mat = db.devis.filter(d => d.type === 'materiau');
+  const mo  = db.devis.filter(d => d.type === 'mo');
+  const line = d => (+d.pu||0)*(+d.qte||0);
+  const totMat = sum(mat, line), totMo = sum(mo, line), total = totMat + totMo;
+  const R = totalRevenus(), reste = R - total;
+  const D = totalDepenses();
+  const totAvances = totalAvances();
+  const resteApresAvances = total - totAvances;
+  const ligne = (d, color) => `
+    <div class="row" data-act="edit-devis" data-id="${d.id}">
+      <div class="avatar" style="background:${color}1f;color:${color}">${initials(d.nom)}</div>
+      <div class="row-main"><div class="row-title">${esc(d.nom)}</div><div class="row-sub">${fmt(d.pu)} × ${fmt(d.qte)}</div></div>
+      <div class="row-amount">${fmt(line(d))}</div>
+    </div>`;
+  const avanceRow = a => `
+    <div class="row" data-act="edit-avance" data-id="${a.id}">
+      <div class="avatar" style="background:#16a34a1f;color:#16a34a">${initials(a.libelle)}</div>
+      <div class="row-main"><div class="row-title">${esc(a.libelle)}</div><div class="row-sub">${a.date ? dateFr(a.date) : 'Avance de paiement'}</div></div>
+      <div class="row-amount" style="color:var(--ok)">${fmt(a.montant)}</div>
+    </div>`;
+  return `
+    <div class="card" style="background:linear-gradient(140deg,#1e293b,#0f172a);color:#fff;border:0">
+      <span class="card-title" style="color:rgba(255,255,255,.65)">Total du devis</span>
+      <div style="font-size:28px;font-weight:800;letter-spacing:-.03em;margin-top:4px">${money(total)}</div>
+      <div style="font-size:12.5px;opacity:.75;margin-top:3px">
+        ${R ? (reste >= 0 ? 'Couvert par les revenus — reste ' + fmt(reste) : '⚠️ Dépassement de ' + fmt(-reste)) : "Matériaux + main d'œuvre"}
+      </div>
+      <div style="font-size:12.5px;opacity:.75;margin-top:6px">Dépenses réelles : ${fmt(D)} (${total ? Math.round(D/total*100) : 0} % du devis)</div>
+      ${totAvances ? `<div style="font-size:12.5px;opacity:.9;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.15)">
+        Avances versées : <b>${fmt(totAvances)}</b> · Reste à régler sur le devis : <b>${fmt(resteApresAvances)}</b>
+      </div>` : ''}
+    </div>
+    <div class="section-head"><h2>Matériaux</h2><span class="sum">${fmt(totMat)}</span></div>
+    <div class="list">${mat.map(d => ligne(d,'#3b82f6')).join('')}
+      <button class="chip-add" data-act="add-devis" data-type="materiau">＋ Ajouter un matériau</button></div>
+    <div class="section-head"><h2>Main d'œuvre</h2><span class="sum">${fmt(totMo)}</span></div>
+    <div class="list">${mo.map(d => ligne(d,'#f97316')).join('')}
+      <button class="chip-add" data-act="add-devis" data-type="mo">＋ Ajouter un poste</button></div>
+    <div class="section-head"><h2>Avances de paiement</h2><span class="sum">${fmt(totAvances)}</span></div>
+    <div class="list">${db.avances.map(avanceRow).join('')}
+      <button class="chip-add" data-act="add-avance">＋ Ajouter une avance</button></div>`;
+}
+
+function afterRender(){
+  const ep = $('#epargne');
+  if(ep) ep.addEventListener('change', () => { db.epargne = +ep.value || 0; save(); render(true); });
+  const q = $('#q');
+  if(q) q.addEventListener('input', () => {
+    query = q.value;
+    const pos = q.selectionStart;
+    render(true);
+    const nq = $('#q'); nq.focus(); try{ nq.setSelectionRange(pos,pos); }catch(e){}
+  });
+  updateInstallBox();
+}
+
+/* =========================================================
+   FEUILLES (MODALES)
+   ========================================================= */
+function openSheet(html){
+  $('#sheetContent').innerHTML = html;
+  $('#backdrop').classList.add('show');
+  $('#sheet').classList.add('show');
+  $('#sheet').scrollTop = 0;
+}
+function closeSheet(){ $('#backdrop').classList.remove('show'); $('#sheet').classList.remove('show'); }
+$('#backdrop').addEventListener('click', closeSheet);
+
+/* Suppression avec possibilité d'annuler */
+function removeItem(key, id, label){
+  const idx = db[key].findIndex(x => x.id === id);
+  if(idx < 0) return;
+  const [item] = db[key].splice(idx, 1);
+  save(); closeSheet(); render(true);
+  toast(label + ' supprimé(e)', () => { db[key].splice(idx, 0, item); save(); render(true); });
+}
+
+function openDepForm(id){
+  const isNew = !id;
+  const d = isNew ? {libelle:'', cat:'Plaquiste', montant:'', echeance:'', paye:false} : db.depenses.find(x => x.id === id);
+  if(!d) return;
+  openSheet(`
+    <h2 class="sheet-title">${isNew ? 'Nouvelle dépense' : 'Modifier la dépense'}</h2>
+    <form id="frm" novalidate>
+      <label class="field"><span>Élément</span><input name="libelle" required value="${esc(d.libelle)}" placeholder="Ex : Plaquiste"></label>
+      <label class="field"><span>Catégorie</span>
+        <select name="cat">${CATS.map(c => `<option ${c===d.cat?'selected':''}>${c}</option>`).join('')}</select></label>
+      <label class="field"><span>Montant (${esc(db.devise)})</span>
+        <input name="montant" type="number" inputmode="decimal" step="any" required value="${d.montant}" placeholder="0"></label>
+      <label class="field"><span>Date d'échéance</span><input name="echeance" type="date" value="${d.echeance||''}"></label>
+      <label class="switch"><input type="checkbox" name="paye" ${d.paye?'checked':''}><span class="track"></span> Marquer comme payé</label>
+      <div class="sheet-actions">
+        ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>`);
+  $('#frm').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const obj = {
+      libelle: (f.get('libelle')||'').toString().trim() || 'Sans nom',
+      cat: f.get('cat'), montant: +f.get('montant') || 0,
+      echeance: f.get('echeance') || '', paye: f.get('paye') === 'on'
+    };
+    if(isNew) db.depenses.push({id:uid(), ...obj}); else Object.assign(d, obj);
+    save(); closeSheet(); render(true);
+  });
+  const del = $('#del'); if(del) del.addEventListener('click', () => removeItem('depenses', id, 'Dépense'));
+}
+
+function openRevForm(id){
+  const isNew = !id;
+  const r = isNew ? {libelle:'', montant:'', date:''} : db.revenus.find(x => x.id === id);
+  if(!r) return;
+  openSheet(`
+    <h2 class="sheet-title">${isNew ? 'Nouveau revenu' : 'Modifier le revenu'}</h2>
+    <form id="frm" novalidate>
+      <label class="field"><span>Source de revenu</span><input name="libelle" required value="${esc(r.libelle)}" placeholder="Ex : Salaire, avance client…"></label>
+      <label class="field"><span>Montant (${esc(db.devise)})</span><input name="montant" type="number" inputmode="decimal" step="any" required value="${r.montant}" placeholder="0"></label>
+      <label class="field"><span>Date</span><input name="date" type="date" value="${r.date||''}"></label>
+      <div class="sheet-actions">
+        ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>`);
+  $('#frm').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const obj = { libelle:(f.get('libelle')||'').toString().trim() || 'Revenu', montant:+f.get('montant') || 0, date:f.get('date') || '' };
+    if(isNew) db.revenus.push({id:uid(), ...obj}); else Object.assign(r, obj);
+    save(); closeSheet(); render(true);
+  });
+  const del = $('#del'); if(del) del.addEventListener('click', () => removeItem('revenus', id, 'Revenu'));
+}
+
+function openDevisForm(id, type){
+  const isNew = !id;
+  const d = isNew ? {nom:'', type: type || 'materiau', pu:'', qte:1} : db.devis.find(x => x.id === id);
+  if(!d) return;
+  const isMat = d.type === 'materiau';
+  openSheet(`
+    <h2 class="sheet-title">${isNew ? (isMat ? 'Nouveau matériau' : 'Nouveau poste') : 'Modifier la ligne'}</h2>
+    <form id="frm" novalidate>
+      <label class="field"><span>Désignation</span><input name="nom" required value="${esc(d.nom)}" placeholder="${isMat ? 'Ex : PLAFOND' : 'Ex : MAÇON'}"></label>
+      <div class="field-row">
+        <label class="field"><span>${isMat ? 'Prix unitaire' : 'Montant'}</span><input name="pu" type="number" inputmode="decimal" step="any" required value="${d.pu}" placeholder="0"></label>
+        <label class="field"><span>${isMat ? 'Quantité' : 'Nombre'}</span><input name="qte" type="number" inputmode="decimal" step="any" required value="${d.qte}" placeholder="1"></label>
+      </div>
+      <div class="sheet-actions">
+        ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>`);
+  $('#frm').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const obj = { nom:(f.get('nom')||'').toString().trim() || 'Ligne', pu:+f.get('pu') || 0, qte:+f.get('qte') || 0 };
+    if(isNew) db.devis.push({id:uid(), type:d.type, ...obj}); else Object.assign(d, obj);
+    save(); closeSheet(); render(true);
+  });
+  const del = $('#del'); if(del) del.addEventListener('click', () => removeItem('devis', id, 'Ligne'));
+}
+
+function openAvanceForm(id){
+  const isNew = !id;
+  const a = isNew ? {libelle:'', montant:'', date:todayStr()} : db.avances.find(x => x.id === id);
+  if(!a) return;
+  openSheet(`
+    <h2 class="sheet-title">${isNew ? 'Nouvelle avance de paiement' : "Modifier l'avance"}</h2>
+    <form id="frm" novalidate>
+      <label class="field"><span>Libellé</span><input name="libelle" required value="${esc(a.libelle)}" placeholder="Ex : Acompte maçon"></label>
+      <label class="field"><span>Montant (${esc(db.devise)})</span><input name="montant" type="number" inputmode="decimal" step="any" required value="${a.montant}" placeholder="0"></label>
+      <label class="field"><span>Date</span><input name="date" type="date" value="${a.date||''}"></label>
+      <div class="sheet-actions">
+        ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>`);
+  $('#frm').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const obj = { libelle:(f.get('libelle')||'').toString().trim() || 'Avance', montant:+f.get('montant') || 0, date:f.get('date') || '' };
+    if(isNew) db.avances.push({id:uid(), ...obj}); else Object.assign(a, obj);
+    save(); closeSheet(); render(true);
+  });
+  const del = $('#del'); if(del) del.addEventListener('click', () => removeItem('avances', id, 'Avance'));
+}
+
+function openSettings(){
+  openSheet(`
+    <h2 class="sheet-title">Réglages</h2>
+    <form id="frm" novalidate>
+      <label class="field"><span>Nom du chantier</span><input name="nom" value="${esc(db.nom)}" placeholder="Chantier"></label>
+      <label class="field"><span>Devise</span><input name="devise" value="${esc(db.devise)}" placeholder="DA" maxlength="6"></label>
+      <label class="field"><span>Apparence</span>
+        <select name="theme">
+          <option value="auto" ${db.theme==='auto'?'selected':''}>Automatique</option>
+          <option value="light" ${db.theme==='light'?'selected':''}>Clair</option>
+          <option value="dark" ${db.theme==='dark'?'selected':''}>Sombre</option>
+        </select></label>
+      <div class="sheet-actions"><button type="submit" class="btn primary">Enregistrer</button></div>
+    </form>`);
+  $('#frm').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    db.nom = (f.get('nom')||'').toString().trim() || 'Chantier';
+    db.devise = (f.get('devise')||'').toString().trim() || 'DA';
+    db.theme = f.get('theme');
+    save(); applyTheme(); closeSheet(); render(true);
+  });
+}
+
+/* =========================================================
+   EXPORT / IMPORT
+   ========================================================= */
+function download(name, content, type){
+  const blob = new Blob([content], {type});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function exportJSON(){ download('chantier-' + todayStr() + '.json', JSON.stringify(db, null, 2), 'application/json'); toast('Sauvegarde exportée'); }
+function exportCSV(){
+  const q = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
+  const lines = [['Élément','Catégorie','Montant','Échéance','Payé'].map(q).join(';')];
+  db.depenses.forEach(d => lines.push([d.libelle, d.cat, d.montant, d.echeance, d.paye?'Oui':'Non'].map(q).join(';')));
+  download('depenses-' + todayStr() + '.csv', '﻿' + lines.join('\n'), 'text/csv;charset=utf-8');
+  toast('CSV exporté (ouvrable dans Excel)');
+}
+$('#importFile').addEventListener('change', e => {
+  const file = e.target.files[0]; if(!file) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try{
+      const o = JSON.parse(rd.result);
+      if(!o || !Array.isArray(o.depenses)) throw new Error('format');
+      if(confirm('Remplacer toutes les données actuelles par cette sauvegarde ?')){
+        db = normalize(o); save(); applyTheme(); render(); toast('Sauvegarde importée');
+      }
+    }catch(err){ toast('⚠️ Fichier invalide'); }
+    e.target.value = '';
+  };
+  rd.readAsText(file);
+});
+
+/* =========================================================
+   ÉVÉNEMENTS
+   ========================================================= */
+document.addEventListener('click', e => {
+  const tabBtn = e.target.closest('[data-tab]');
+  if(tabBtn){ tab = tabBtn.dataset.tab; render(); return; }
+
+  const t = e.target.closest('[data-act]');
+  if(!t) return;
+  const act = t.dataset.act, id = t.dataset.id;
+
+  if(act === 'toggle-paid'){
+    e.stopPropagation();
+    const d = db.depenses.find(x => x.id === id);
+    if(d){ d.paye = !d.paye; save(); render(true); if(navigator.vibrate) navigator.vibrate(10); }
+    return;
+  }
+  if(act === 'edit-dep')   openDepForm(id);
+  if(act === 'edit-rev')   openRevForm(id);
+  if(act === 'edit-devis') openDevisForm(id);
+  if(act === 'add-devis')  openDevisForm(null, t.dataset.type);
+  if(act === 'edit-avance') openAvanceForm(id);
+  if(act === 'add-avance')  openAvanceForm(null);
+  if(act === 'goto-dep'){ tab = 'dep'; render(); }
+  if(act === 'goto-late'){ tab = 'dep'; filter = 'late'; render(); }
+  if(act === 'filter'){ filter = t.dataset.f; render(true); }
+  if(act === 'export') exportJSON();
+  if(act === 'csv') exportCSV();
+  if(act === 'import') $('#importFile').click();
+  if(act === 'reset' && confirm("Réinitialiser toutes les données et revenir au budget d'origine ?")){
+    db = seed(); save(); applyTheme(); render(); toast('Données réinitialisées');
+  }
+});
+
+$('#settingsBtn').addEventListener('click', openSettings);
+$('#fab').addEventListener('click', () => {
+  if(tab === 'rev')   return openRevForm(null);
+  if(tab === 'devis') return openDevisForm(null, 'materiau');
+  openDepForm(null);
+});
+
+/* =========================================================
+   INSTALLATION PWA + HORS-LIGNE
+   ========================================================= */
+let deferredPrompt = null;
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; updateInstallBox(); });
+window.addEventListener('appinstalled', () => { deferredPrompt = null; updateInstallBox(); toast('Application installée ✓'); });
+
+function updateInstallBox(){
+  const box = $('#installBox'); if(!box) return;
+  if(isStandalone()) return box.classList.remove('show');
+  if(deferredPrompt){ box.classList.add('show'); }
+  else if(isIOS){
+    box.classList.add('show');
+    $('#installTxt').textContent = 'Safari : Partager ⎋ puis « Sur l\'écran d\'accueil »';
+    $('#installBtn').style.display = 'none';
+  }
+}
+document.addEventListener('click', async e => {
+  if(e.target.id === 'installBtn' && deferredPrompt){
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null; updateInstallBox();
+  }
+});
+
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+/* DÉMARRAGE */
+db = load();
+applyTheme();
+render();
+</script>
+</body>
+</html>
