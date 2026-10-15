@@ -233,8 +233,77 @@ function load(){
   return seed();
 }
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify(db)); }
+  try{
+    snapshot('auto', false, localStorage.getItem(KEY));   /* copie de l'état précédent */
+    localStorage.setItem(KEY, JSON.stringify(db));
+  }
   catch(e){ toast('⚠️ Sauvegarde impossible (stockage plein ou bloqué)'); }
+}
+
+/* ---------- Copies automatiques (protection contre les erreurs / effacements) ---------- */
+const AUTO_KEY = 'chantier_app_v1_auto';
+function readAuto(){
+  try{ const a = JSON.parse(localStorage.getItem(AUTO_KEY)); return Array.isArray(a) ? a : []; }
+  catch(e){ return []; }
+}
+function snapshot(label, force, raw){
+  try{
+    raw = raw || (db ? JSON.stringify(db) : null);
+    if(!raw) return;
+    const list = readAuto(), last = list[0];
+    if(!force && last && Date.now() - last.t < 12*3600*1000) return;
+    if(last && last.data === raw) return;
+    list.unshift({t: Date.now(), label: label || 'auto', data: raw});
+    while(list.length > 7) list.pop();
+    localStorage.setItem(AUTO_KEY, JSON.stringify(list));
+  }catch(e){ /* stockage plein : on ignore, l'app continue */ }
+}
+function autoSummary(c){
+  try{
+    const o = JSON.parse(c.data);
+    return (o.depenses||[]).length + ' dépenses · ' + (o.revenus||[]).length + ' revenus · ' + (o.ouvriers||[]).length + ' ouvriers';
+  }catch(e){ return ''; }
+}
+function autoCopiesHtml(){
+  setTimeout(checkPersist, 0);
+  const list = readAuto();
+  const rows = list.map((c, i) => `
+    <div class="row" data-act="restore-auto" data-id="${i}">
+      <div class="avatar" style="background:#3b82f61f;color:#3b82f6">↺</div>
+      <div class="row-main"><div class="row-title">${new Date(c.t).toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}${c.label && c.label !== 'auto' ? ' · ' + esc(c.label) : ''}</div>
+        <div class="row-sub">${esc(autoSummary(c))}</div></div>
+      <div class="row-amount" style="font-size:12.5px;color:var(--accent)">Restaurer</div>
+    </div>`).join('');
+  return `
+    <div class="section-head" style="margin-top:22px"><h2>Copies automatiques</h2></div>
+    ${list.length ? `<div class="list">${rows}</div>` : `<div class="hint" style="margin-bottom:10px">Aucune copie pour l'instant : une copie est faite avant chaque modification importante.</div>`}
+    <div class="hint" id="persistState" style="margin-top:6px"></div>`;
+}
+function checkPersist(){
+  const el = $('#persistState'); if(!el) return;
+  if(!(navigator.storage && navigator.storage.persisted)){ el.textContent = ''; return; }
+  navigator.storage.persisted().then(ok => {
+    el.textContent = ok ? '🔒 Stockage protégé par le navigateur.' : '⚠️ Stockage non protégé : exportez régulièrement une copie (Accueil → Sauvegarde).';
+  });
+}
+function restoreAuto(i){
+  const c = readAuto()[i]; if(!c) return;
+  if(!confirm('Restaurer la copie du ' + new Date(c.t).toLocaleString('fr-FR') + ' ?\nLes données actuelles seront aussi gardées dans les copies automatiques.')) return;
+  try{
+    const o = normalize(JSON.parse(c.data));
+    snapshot('avant restauration', true);
+    db = o; save(); applyTheme(); closeSheet(); render(); toast('Copie restaurée');
+  }catch(e){ toast('⚠️ Copie illisible'); }
+}
+function backupBanner(){
+  const has = db.depenses.length || db.revenus.length || db.ouvriers.length;
+  if(!has) return '';
+  const d = db.lastExport ? -daysUntil(db.lastExport) : null;
+  if(d !== null && d < 7) return '';
+  return `<div class="card" style="border-color:#f97316;background:#fff7ed;color:#7c2d12">
+    <div style="font-weight:800;margin-bottom:4px">Sauvegarde conseillée</div>
+    <div style="font-size:13px;margin-bottom:10px">${d === null ? "Vous n'avez encore jamais exporté de copie." : 'Dernière copie exportée il y a ' + d + ' jours.'} Gardez le fichier dans vos téléchargements ou envoyez-le-vous.</div>
+    <button class="btn primary" style="width:100%" data-act="export">⬇︎ Exporter maintenant</button></div>`;
 }
 
 const sum = (arr, f) => arr.reduce((s,x)=>s+(+f(x)||0),0);
@@ -332,6 +401,7 @@ function viewHome(){
     <div><b>Installer l'application</b><span id="installTxt">Accès rapide depuis l'écran d'accueil</span></div>
     <button id="installBtn">Installer</button>
   </div>
+  ${backupBanner()}
 
   <div class="hero">
     <div class="hero-badge">${pct} % dépensé</div>
@@ -834,7 +904,8 @@ function openSettings(){
           <option value="dark" ${db.theme==='dark'?'selected':''}>Sombre</option>
         </select></label>
       <div class="sheet-actions"><button type="submit" class="btn primary">Enregistrer</button></div>
-    </form>`);
+    </form>
+    ${autoCopiesHtml()}`);
   $('#frm').addEventListener('submit', e => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -855,7 +926,7 @@ function download(name, content, type){
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-function exportJSON(){ download('chantier-' + todayStr() + '.json', JSON.stringify(db, null, 2), 'application/json'); toast('Sauvegarde exportée'); }
+function exportJSON(){ db.lastExport = todayStr(); save(); render(true); download('chantier-' + todayStr() + '.json', JSON.stringify(db, null, 2), 'application/json'); toast('Sauvegarde exportée'); }
 function exportCSV(){
   const q = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
   const lines = [['Élément','Catégorie','Montant','Échéance','Payé'].map(q).join(';')];
@@ -871,6 +942,7 @@ $('#importFile').addEventListener('change', e => {
       const o = JSON.parse(rd.result);
       if(!o || !Array.isArray(o.depenses)) throw new Error('format');
       if(confirm('Remplacer toutes les données actuelles par cette sauvegarde ?')){
+        snapshot('avant import', true);
         db = normalize(o); save(); applyTheme(); render(); toast('Sauvegarde importée');
       }
     }catch(err){ toast('⚠️ Fichier invalide'); }
@@ -902,6 +974,7 @@ document.addEventListener('click', e => {
   if(act === 'add-devis')  openDevisForm(null, t.dataset.type);
   if(act === 'edit-avance') openAvanceForm(id);
   if(act === 'add-avance')  openAvanceForm(null);
+  if(act === 'restore-auto') restoreAuto(+id);
   if(act === 'open-ouv')   openOuvrierDetail(id);
   if(act === 'add-ouv')    openOuvrierForm(null);
   if(act === 'edit-ouv')   openOuvrierForm(id);
@@ -915,6 +988,7 @@ document.addEventListener('click', e => {
   if(act === 'csv') exportCSV();
   if(act === 'import') $('#importFile').click();
   if(act === 'reset' && confirm("Réinitialiser toutes les données et revenir au budget d'origine ?")){
+    snapshot('avant réinitialisation', true);
     db = seed(); save(); applyTheme(); render(); toast('Données réinitialisées');
   }
 });
@@ -960,6 +1034,7 @@ if('serviceWorker' in navigator && location.protocol.startsWith('http')){
 }
 
 /* DÉMARRAGE */
+if(navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(()=>{}); }
 db = load();
 applyTheme();
 render();
