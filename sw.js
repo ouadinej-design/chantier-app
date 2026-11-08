@@ -1,5 +1,7 @@
-/* Service worker — Chantier PWA : fonctionnement hors ligne */
-const CACHE = 'chantier-v4';
+/* Service worker — Chantier PWA : fonctionnement hors ligne.
+   La page est chargée depuis le réseau en priorité (mises à jour immédiates),
+   avec repli sur la copie en cache quand il n'y a pas de connexion. */
+const CACHE = 'chantier-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -22,18 +24,26 @@ self.addEventListener('activate', e => {
   );
 });
 
+const putCache = (req, res) => {
+  if(res && res.status === 200 && res.type === 'basic'){
+    const copy = res.clone();
+    caches.open(CACHE).then(c => c.put(req, copy));
+  }
+  return res;
+};
+
 self.addEventListener('fetch', e => {
-  if(e.request.method !== 'GET') return;
+  const req = e.request;
+  if(req.method !== 'GET') return;
+  const isPage = req.mode === 'navigate' || req.destination === 'document';
+  if(isPage){
+    e.respondWith(
+      fetch(req).then(res => putCache(req, res))
+        .catch(() => caches.match(req).then(r => r || caches.match('./index.html')))
+    );
+    return;
+  }
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const fetchPromise = fetch(e.request).then(res => {
-        if(res && res.status === 200 && res.type === 'basic'){
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy));
-        }
-        return res;
-      }).catch(() => cached);
-      return cached || fetchPromise;
-    })
+    caches.match(req).then(cached => cached || fetch(req).then(res => putCache(req, res)))
   );
 });

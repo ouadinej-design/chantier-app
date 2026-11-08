@@ -95,8 +95,8 @@ main{padding:16px 14px calc(120px + env(safe-area-inset-bottom))}
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0 8px;border:0;background:none;color:var(--muted);font-size:10.5px;font-weight:700;letter-spacing:.02em;cursor:pointer;transition:color .18s}
 .tab svg{width:22px;height:22px;stroke-width:1.9;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round}
 .tab.active{color:var(--accent)}.tab.active svg{stroke-width:2.3}
-.fab-wrap{position:fixed;left:0;right:0;bottom:calc(78px + env(safe-area-inset-bottom));max-width:520px;margin:0 auto;pointer-events:none;z-index:40}
-.fab{position:absolute;right:16px;width:56px;height:56px;border-radius:50%;border:0;background:linear-gradient(135deg,#ff8a5c,#e64a19);display:grid;place-items:center;pointer-events:auto;cursor:pointer;box-shadow:0 10px 24px -8px rgba(230,74,25,.85);transition:transform .15s}
+.fab-wrap{position:fixed;left:0;right:0;bottom:calc(76px + env(safe-area-inset-bottom));max-width:520px;margin:0 auto;pointer-events:none;z-index:40}
+.fab{position:absolute;right:16px;bottom:0;width:56px;height:56px;border-radius:50%;border:0;background:linear-gradient(135deg,#ff8a5c,#e64a19);display:grid;place-items:center;pointer-events:auto;cursor:pointer;box-shadow:0 10px 24px -8px rgba(230,74,25,.85);transition:transform .15s}
 .fab:active{transform:scale(.93)}
 .fab svg{width:26px;height:26px;stroke:#fff;stroke-width:2.6;fill:none;stroke-linecap:round}
 .backdrop{position:fixed;inset:0;background:rgba(13,17,23,.55);opacity:0;pointer-events:none;transition:opacity .28s;z-index:55;backdrop-filter:blur(2px)}
@@ -133,6 +133,21 @@ main{padding:16px 14px calc(120px + env(safe-area-inset-bottom))}
 .install{background:linear-gradient(135deg,#1e293b,#0f172a);color:#fff;border-radius:16px;padding:14px 16px;margin-bottom:12px;display:none;align-items:center;justify-content:space-between;gap:12px}
 .install.show{display:flex}
 .install b{display:block;font-size:14px}.install span{font-size:12px;opacity:.75}
+.wtag{display:inline-block;font-size:10.5px;font-weight:750;padding:1px 7px;border-radius:99px;background:color-mix(in srgb,#8b5cf6 14%,transparent);color:#7c3aed;vertical-align:middle;margin-left:2px}
+.mini-bar{height:5px;border-radius:99px;background:var(--soft);overflow:hidden;margin-top:6px}
+.mini-bar i{display:block;height:100%;border-radius:99px}
+.pay-box{border-radius:16px;padding:16px;margin-bottom:12px;color:#fff;background:linear-gradient(140deg,#1e293b,#0f172a)}
+.pay-box .lbl{font-size:11px;font-weight:800;letter-spacing:.08em;opacity:.7;text-transform:uppercase}
+.pay-box .val{font-size:30px;font-weight:800;letter-spacing:-.03em;margin:2px 0 8px}
+.calc{display:grid;grid-template-columns:1fr auto;gap:3px 12px;font-size:13px;padding-top:10px;border-top:1px solid rgba(255,255,255,.15)}
+.calc span{opacity:.75}.calc b{text-align:right}
+.calc .tot{opacity:1;font-weight:800;padding-top:4px;border-top:1px dashed rgba(255,255,255,.25)}
+.pick{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.pick:last-child{border-bottom:0}
+.pick input{width:22px;height:22px;accent-color:var(--accent);flex:none}
+.pick.other{opacity:.55}
+.badge.sugg{background:#ede9fe;color:#6d28d9}
+.badge.dup{background:var(--soft);color:var(--muted)}
 .install button{border:0;border-radius:11px;padding:10px 14px;font-weight:800;background:var(--accent);color:#fff;font-size:13px;cursor:pointer;flex:none}
 </style>
 </head>
@@ -314,14 +329,73 @@ const totalDevis    = () => sum(db.devis, d=>(+d.pu||0)*(+d.qte||0));
 const totalAvances  = () => sum(db.avances, a=>a.montant);
 const isLate = d => d.echeance && !d.paye && daysUntil(d.echeance) < 0;
 
-/* Ouvriers : crédit = salaire dû à l'ouvrier, débit = somme versée. Solde = crédit − débit (reste à payer). */
-const mvtsOf   = id => db.mouvements.filter(m => m.ouvrierId === id);
-const creditOf = id => sum(mvtsOf(id).filter(m => m.type === 'credit'), m => m.montant);
-const debitOf  = id => sum(mvtsOf(id).filter(m => m.type === 'debit'),  m => m.montant);
-const soldeOf  = id => creditOf(id) - debitOf(id);
-function soldeBadge(s){
-  if(Math.abs(s) < 0.005) return {txt:'Soldé', color:'var(--ok)'};
-  return s > 0 ? {txt:'Reste ' + fmt(s), color:'#f97316'} : {txt:'Avance ' + fmt(-s), color:'#3b82f6'};
+/* =========================================================
+   OUVRIERS — Salaire convenu − Avances versées = Reste à donner
+   Salaire  : salaire forfaitaire + lignes « main d'œuvre » du devis liées + salaires ajoutés
+   Avances  : dépenses PAYÉES liées + avances de paiement liées + versements ajoutés
+   Une avance du devis identique (même montant, même date) à une dépense liée n'est comptée qu'une fois.
+   ========================================================= */
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const ouvById = id => db.ouvriers.find(o => o.id === id);
+const ouvName = id => (ouvById(id) || {}).nom || '';
+const wtag = id => id && ouvById(id) ? ` <span class="wtag">👷 ${esc(ouvName(id))}</span>` : '';
+
+function compte(id){
+  const o = ouvById(id) || {};
+  const du = [], verse = [], prevu = [];
+  if(+o.salaire) du.push({src:'forfait', libelle:'Salaire convenu', montant:+o.salaire, date:''});
+  db.devis.filter(d => d.ouvrierId === id).forEach(d => du.push({src:'devis', id:d.id, libelle:d.nom, montant:(+d.pu||0)*(+d.qte||0), date:'', detail:fmt(d.pu) + ' × ' + fmt(d.qte)}));
+  db.mouvements.filter(m => m.ouvrierId === id && m.type === 'credit').forEach(m => du.push({src:'credit', id:m.id, libelle:m.libelle, montant:+m.montant||0, date:m.date||'', detail:m.jours ? fmt(m.jours) + ' j' : ''}));
+  db.depenses.filter(d => d.ouvrierId === id).forEach(d => (d.paye ? verse : prevu).push({src:'dep', id:d.id, libelle:d.libelle, montant:+d.montant||0, date:d.echeance||'', cat:d.cat}));
+  db.avances.filter(a => a.ouvrierId === id).forEach(a => {
+    const m = +a.montant || 0, dt = a.date || '';
+    const twin = verse.find(v => v.src === 'dep' && !v.twin && v.montant === m && v.date === dt);
+    if(twin){ twin.twin = a.id; return; }               /* même paiement saisi deux fois → compté une fois */
+    verse.push({src:'avance', id:a.id, libelle:a.libelle, montant:m, date:dt});
+  });
+  db.mouvements.filter(m => m.ouvrierId === id && m.type === 'debit').forEach(m => verse.push({src:'debit', id:m.id, libelle:m.libelle, montant:+m.montant||0, date:m.date||''}));
+  verse.sort((a,b) => (a.date || '9999').localeCompare(b.date || '9999'));
+  const D = sum(du, x => x.montant), V = sum(verse, x => x.montant), P = sum(prevu, x => x.montant);
+  return {o, du, verse, prevu, D, V, P, reste: D - V};
+}
+function resteBadge(r){
+  if(Math.abs(r) < 0.005) return {txt:'Soldé ✓', color:'var(--ok)'};
+  return r > 0 ? {txt:fmt(r), color:'#f97316'} : {txt:'+' + fmt(-r) + ' en trop', color:'#3b82f6'};
+}
+const totalResteOuvriers = () => sum(db.ouvriers.map(o => compte(o.id)), c => Math.max(c.reste, 0));
+
+/* Catégorie de dépense devinée à partir du métier */
+function guessCat(metier){
+  const m = norm(metier);
+  if(/plaqu|placo|platr/.test(m)) return 'Plaquiste';
+  if(/plomb|chauff/.test(m)) return 'Plomberie';
+  if(/elec/.test(m)) return 'Électricité';
+  if(/macon|dalle/.test(m)) return 'Maçonnerie';
+  if(/peint|enduit/.test(m)) return 'Peinture';
+  if(/carrel/.test(m)) return 'Carrelage';
+  if(/manoeuv|manoe|aide/.test(m)) return 'Manœuvres';
+  return 'Autre';
+}
+/* Suggestion de liaison : 2 = son nom est dans le libellé (pré-coché) ; 1 = même métier / catégorie (proposé seulement) */
+function suggests(o, libelle, cat, withMetier){
+  const L = norm(libelle), toks = s => norm(s).split(/[^a-z0-9]+/).filter(t => t.length >= 3);
+  if(toks(o.nom).some(t => L.includes(t))) return 2;
+  if(withMetier && toks(o.metier).some(t => L.includes(t.slice(0, 5)))) return 1;
+  return (o.cat && cat === o.cat && /avance|salaire|solde/.test(L)) ? 1 : 0;
+}
+function ouvSelect(cur){
+  if(!db.ouvriers.length) return '';
+  return `<label class="field"><span>Ouvrier concerné (salaire / avance)</span>
+    <select name="ouvrierId"><option value="">— Aucun —</option>
+    ${db.ouvriers.map(o => `<option value="${o.id}" ${o.id === cur ? 'selected' : ''}>${esc(o.nom)}${o.metier ? ' · ' + esc(o.metier) : ''}</option>`).join('')}</select></label>`;
+}
+const readOuv = (f, obj) => { if(f.has('ouvrierId')) obj.ouvrierId = f.get('ouvrierId') || ''; return obj; };
+
+/* Retour vers la fiche ouvrier après une modification ouverte depuis celle-ci */
+let backTo = null;
+function done(){
+  save(); render(true);
+  if(backTo && ouvById(backTo)) openOuvrierDetail(backTo); else closeSheet();
 }
 
 /* ---------- Thème ---------- */
@@ -417,6 +491,14 @@ function viewHome(){
     <div class="stat"><div class="stat-label"><span class="dot orange"></span>Reste à payer</div><div class="stat-value">${fmt(D - P)}</div></div>
   </div>
 
+  ${db.ouvriers.length ? (() => {
+    const RO = totalResteOuvriers();
+    return `<div class="card" data-act="goto-ouv" style="cursor:pointer">
+      <div class="between"><span class="card-title">👷 Reste à donner aux ouvriers</span>
+        <strong style="font-size:18px;color:${RO > 0 ? '#f97316' : 'var(--ok)'}">${money(RO)}</strong></div>
+      <div class="hint" style="margin-top:4px">Après paiement des salaires restants, il restera <b style="color:${solde - RO < 0 ? 'var(--bad)' : 'var(--ink)'}">${money(solde - RO)}</b> · voir le détail ›</div>
+    </div>`; })() : ''}
+
   ${lateN ? `<div class="card" style="border-color:#fecaca;background:color-mix(in srgb,#dc2626 8%,var(--card))">
     <b style="color:var(--bad)">⚠️ ${lateN} paiement${lateN>1?'s':''} en retard</b>
     <div class="hint" data-act="goto-late" style="cursor:pointer;text-decoration:underline;margin-top:2px">Voir les retards</div>
@@ -500,7 +582,7 @@ function viewDep(){
       <button class="check ${d.paye?'on':''}" data-act="toggle-paid" data-id="${d.id}" aria-label="Payé">✓</button>
       <div class="row-main">
         <div class="row-title ${d.paye?'done':''}">${esc(d.libelle)}</div>
-        <div class="row-sub">${d.echeance ? dateFr(d.echeance) : 'Sans échéance'} ${tag}</div>
+        <div class="row-sub">${d.echeance ? dateFr(d.echeance) : 'Sans échéance'} ${tag}${wtag(d.ouvrierId)}</div>
       </div>
       <div class="row-amount ${d.paye?'paid':''}">${fmt(d.montant)}</div>
     </div>`;
@@ -567,13 +649,13 @@ function viewDevis(){
   const ligne = (d, color) => `
     <div class="row" data-act="edit-devis" data-id="${d.id}">
       <div class="avatar" style="background:${color}1f;color:${color}">${initials(d.nom)}</div>
-      <div class="row-main"><div class="row-title">${esc(d.nom)}</div><div class="row-sub">${fmt(d.pu)} × ${fmt(d.qte)}</div></div>
+      <div class="row-main"><div class="row-title">${esc(d.nom)}</div><div class="row-sub">${fmt(d.pu)} × ${fmt(d.qte)}${wtag(d.ouvrierId)}</div></div>
       <div class="row-amount">${fmt(line(d))}</div>
     </div>`;
   const avanceRow = a => `
     <div class="row" data-act="edit-avance" data-id="${a.id}">
       <div class="avatar" style="background:#16a34a1f;color:#16a34a">${initials(a.libelle)}</div>
-      <div class="row-main"><div class="row-title">${esc(a.libelle)}</div><div class="row-sub">${a.date ? dateFr(a.date) : 'Avance de paiement'}</div></div>
+      <div class="row-main"><div class="row-title">${esc(a.libelle)}</div><div class="row-sub">${a.date ? dateFr(a.date) : 'Avance de paiement'}${wtag(a.ouvrierId)}</div></div>
       <div class="row-amount" style="color:var(--ok)">${fmt(a.montant)}</div>
     </div>`;
   return `
@@ -599,64 +681,187 @@ function viewDevis(){
       <button class="chip-add" data-act="add-avance">＋ Ajouter une avance</button></div>`;
 }
 
-/* ---------- OUVRIERS (débit / crédit) ---------- */
+/* ---------- OUVRIERS : salaire − avances = reste à donner ---------- */
 function viewOuv(){
-  const C = sum(db.mouvements.filter(m => m.type === 'credit'), m => m.montant);
-  const D = sum(db.mouvements.filter(m => m.type === 'debit'),  m => m.montant);
-  const reste = C - D;
-  const rows = db.ouvriers.map((o, i) => {
-    const b = soldeBadge(soldeOf(o.id)), col = PALETTE[i % PALETTE.length];
+  const cs = db.ouvriers.map(o => compte(o.id));
+  const D = sum(cs, c => c.D), V = sum(cs, c => c.V);
+  const R = sum(cs, c => Math.max(c.reste, 0)), trop = sum(cs, c => Math.max(-c.reste, 0));
+  const rows = cs.map((c, i) => {
+    const o = c.o, b = resteBadge(c.reste), col = PALETTE[i % PALETTE.length];
+    const pct = c.D > 0 ? Math.min(c.V / c.D, 1) * 100 : 0;
     return `
     <div class="row" data-act="open-ouv" data-id="${o.id}">
       <div class="avatar" style="background:${col}1f;color:${col}">${esc(initials(o.nom))}</div>
-      <div class="row-main"><div class="row-title">${esc(o.nom)}</div>
-        <div class="row-sub">${o.metier ? esc(o.metier) + ' · ' : ''}Dû ${fmt(creditOf(o.id))} · Versé ${fmt(debitOf(o.id))}</div></div>
-      <div class="row-amount" style="color:${b.color}">${b.txt}</div>
+      <div class="row-main"><div class="row-title">${esc(o.nom)}${o.metier ? ' <span style="font-weight:500;color:var(--muted);font-size:12.5px">· ' + esc(o.metier) + '</span>' : ''}</div>
+        <div class="row-sub">Salaire ${fmt(c.D)} · Avances ${fmt(c.V)}</div>
+        <div class="mini-bar"><i style="width:${pct.toFixed(1)}%;background:${c.reste < 0 ? '#3b82f6' : 'var(--ok)'}"></i></div></div>
+      <div style="text-align:right"><div class="row-amount" style="color:${b.color}">${b.txt}</div>
+        <div style="font-size:10.5px;color:var(--muted);font-weight:700">${c.reste > 0.005 ? 'RESTE À DONNER' : ''}</div></div>
     </div>`;
   }).join('');
   return `
-    <div class="card" style="background:linear-gradient(140deg,#1e293b,#0f172a);color:#fff;border:0">
-      <span class="card-title" style="color:rgba(255,255,255,.65)">${reste >= 0 ? 'Reste à payer aux ouvriers' : 'Avances versées en trop'}</span>
-      <div style="font-size:28px;font-weight:800;letter-spacing:-.03em;margin-top:4px">${money(Math.abs(reste))}</div>
-      <div style="font-size:12.5px;opacity:.8;margin-top:6px">Salaires dus (crédit) : <b>${fmt(C)}</b> · Versements (débit) : <b>${fmt(D)}</b></div>
+    <div class="pay-box">
+      <div class="lbl">Reste à donner aux ouvriers</div>
+      <div class="val">${money(R)}</div>
+      <div class="calc">
+        <span>Salaires convenus</span><b>${fmt(D)}</b>
+        <span>− Avances déjà versées</span><b>${fmt(V)}</b>
+        <span class="tot">= Reste à donner</span><b class="tot">${fmt(D - V)}</b>
+      </div>
+      ${trop ? `<div style="font-size:12px;margin-top:8px;opacity:.85">ℹ️ Dont ${fmt(trop)} versés en trop à certains ouvriers.</div>` : ''}
     </div>
     <div class="section-head"><h2>Ouvriers</h2><span class="sum">${db.ouvriers.length}</span></div>
+    ${db.ouvriers.length ? '' : `<div class="card empty" style="margin-bottom:12px"><span class="em">👷</span>
+      <p>Ajoutez un ouvrier : l'app retrouve toute seule ses lignes du devis et ses avances (par son nom), puis calcule ce qu'il reste à lui donner.</p></div>`}
     <div class="list">${rows}
       <button class="chip-add" data-act="add-ouv">＋ Ajouter un ouvrier</button></div>`;
 }
 
 function openOuvrierDetail(id){
-  const o = db.ouvriers.find(x => x.id === id); if(!o) return;
-  const ordered = mvtsOf(id).map((m, i) => ({m, i}))
-    .sort((a, b) => (a.m.date || '').localeCompare(b.m.date || '') || a.i - b.i);
-  let run = 0;
-  const lines = ordered.map(({m}) => { run += (m.type === 'credit' ? 1 : -1) * (+m.montant || 0); return {m, run}; }).reverse();
-  const C = creditOf(id), D = debitOf(id), S = C - D, b = soldeBadge(S);
-  const rows = lines.map(({m, run}) => {
-    const cr = m.type === 'credit', col = cr ? '#16a34a' : '#f97316';
-    return `
-    <div class="row" data-act="edit-mvt" data-id="${m.id}" data-ouv="${id}">
-      <div class="avatar" style="background:${col}1f;color:${col}">${cr ? '＋' : '−'}</div>
-      <div class="row-main"><div class="row-title">${esc(m.libelle)}</div>
-        <div class="row-sub">${m.date ? dateFr(m.date) : 'Sans date'}${m.jours ? ' · ' + fmt(m.jours) + ' j' : ''} · solde ${fmt(run)}</div></div>
-      <div class="row-amount" style="color:${col}">${cr ? '+' : '−'}${fmt(m.montant)}</div>
+  const c = compte(id), o = c.o; if(!o.id) return;
+  backTo = null;
+  const b = resteBadge(c.reste);
+  const srcLbl = {forfait:'Forfait', devis:'Ligne du devis', credit:'Salaire ajouté', dep:'Dépense', avance:'Avance (devis)', debit:'Versement'};
+  const actOf = x => ({forfait:'edit-ouv', devis:'edit-devis', credit:'edit-mvt', dep:'edit-dep', avance:'edit-avance', debit:'edit-mvt'})[x.src];
+  const line = (x, sign, col, sub) => `
+    <div class="row" data-act="${actOf(x)}" data-id="${x.src === 'forfait' ? id : x.id}" data-ouv="${id}" data-back="${id}">
+      <div class="avatar" style="background:${col}1f;color:${col};font-size:16px">${sign}</div>
+      <div class="row-main"><div class="row-title">${esc(x.libelle)}</div><div class="row-sub">${sub}</div></div>
+      <div class="row-amount" style="color:${col}">${sign === '＋' ? '' : '−'}${fmt(x.montant)}</div>
     </div>`;
-  }).join('');
+  let run = c.D;
+  const verseRows = c.verse.map(x => { run -= x.montant; return line(x, '−', '#f97316',
+    `${x.date ? dateFr(x.date) : 'Sans date'} · ${srcLbl[x.src]}${x.twin ? ' <span class="badge dup">aussi dans Avances du devis</span>' : ''} · reste ${fmt(run)}`); }).join('');
+  const duRows = c.du.map(x => line(x, '＋', '#16a34a', [srcLbl[x.src], x.detail, x.date ? dateFr(x.date) : ''].filter(Boolean).join(' · '))).join('');
+  const prevuRows = c.prevu.map(x => line(x, '…', '#94a3b8', (x.date ? dateFr(x.date) : 'Sans date') + ' · non payé — pas encore déduit')).join('');
+
   openSheet(`
-    <h2 class="sheet-title" style="margin-bottom:4px">${esc(o.nom)}</h2>
-    <div class="hint" style="margin-bottom:12px">${o.metier ? esc(o.metier) : 'Ouvrier'}${o.tarif ? ' · ' + fmt(o.tarif) + ' ' + esc(db.devise) + ' / jour' : ''}</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
-      <div class="stat"><div class="stat-label">Crédit</div><div class="stat-value" style="font-size:16px;color:#16a34a">${fmt(C)}</div></div>
-      <div class="stat"><div class="stat-label">Débit</div><div class="stat-value" style="font-size:16px;color:#f97316">${fmt(D)}</div></div>
-      <div class="stat"><div class="stat-label">Solde</div><div class="stat-value" style="font-size:16px;color:${b.color}">${fmt(S)}</div></div>
+    <h2 class="sheet-title" style="margin-bottom:2px">${esc(o.nom)}</h2>
+    <div class="hint" style="margin-bottom:12px">${esc(o.metier || 'Ouvrier')}${o.cat ? ' · catégorie ' + esc(o.cat) : ''}</div>
+    <div class="pay-box">
+      <div class="lbl">${c.reste < -0.005 ? 'Versé en trop' : 'Reste à lui donner'}</div>
+      <div class="val" style="color:${c.reste > 0.005 ? '#ffb38a' : c.reste < -0.005 ? '#93c5fd' : '#86efac'}">${money(Math.abs(c.reste))}</div>
+      <div class="calc">
+        <span>Salaire convenu</span><b>${fmt(c.D)}</b>
+        <span>− Avances versées (${c.verse.length})</span><b>${fmt(c.V)}</b>
+        <span class="tot">= ${c.reste < -0.005 ? 'Trop versé' : 'Reste à donner'}</span><b class="tot">${fmt(c.reste)}</b>
+      </div>
+      ${c.P ? `<div style="font-size:12px;margin-top:8px;opacity:.85">⏳ ${fmt(c.P)} prévus mais pas encore cochés « payé ».</div>` : ''}
     </div>
-    <div class="hint" style="margin-bottom:12px">Crédit = salaire dû · Débit = somme versée · ${S > 0 ? 'Reste à payer : ' + fmt(S) : S < 0 ? 'Avance en trop : ' + fmt(-S) : 'Compte soldé'}</div>
-    <div class="sheet-actions" style="margin-bottom:14px">
-      <button class="btn primary" data-act="add-credit" data-ouv="${id}">＋ Salaire dû</button>
-      <button class="btn ghost" style="flex:1" data-act="add-debit" data-ouv="${id}">− Versement</button>
+    <div class="sheet-actions" style="margin-bottom:8px">
+      <button class="btn primary" data-act="ouv-pay" data-ouv="${id}">＋ Donner une avance</button>
+      ${c.reste > 0.005 ? `<button class="btn ghost" style="flex:1" data-act="ouv-solde" data-ouv="${id}">✓ Payer le reste</button>` : ''}
     </div>
-    ${lines.length ? `<div class="list">${rows}</div>` : `<div class="empty"><p>Aucune opération pour le moment.</p></div>`}
-    <button class="chip-add" style="border-radius:13px" data-act="edit-ouv" data-id="${id}">Modifier l'ouvrier</button>`);
+    <div class="mini-actions" style="margin-bottom:6px">
+      <button class="btn ghost" data-act="ouv-link" data-ouv="${id}">🔗 Lier lignes & avances</button>
+      <button class="btn ghost" data-act="ouv-share" data-ouv="${id}">↗︎ Envoyer le relevé</button>
+    </div>
+
+    <div class="section-head"><h2>Salaire convenu</h2><span class="sum">${fmt(c.D)}</span></div>
+    ${c.du.length ? `<div class="list">${duRows}</div>`
+      : `<div class="hint" style="margin:0 4px 10px">Aucun salaire : liez une ligne « main d'œuvre » du devis ou indiquez un salaire forfaitaire (Modifier).</div>`}
+    <button class="chip-add" style="border-radius:13px;margin-bottom:6px" data-act="add-credit" data-ouv="${id}">＋ Ajouter du travail (jours, supplément…)</button>
+
+    <div class="section-head"><h2>Avances versées</h2><span class="sum">${fmt(c.V)}</span></div>
+    ${c.verse.length ? `<div class="list">${verseRows}</div>`
+      : `<div class="hint" style="margin:0 4px 10px">Aucune avance liée pour l'instant.</div>`}
+
+    ${c.prevu.length ? `<div class="section-head"><h2>Prévu, non payé</h2><span class="sum">${fmt(c.P)}</span></div>
+      <div class="list">${prevuRows}</div>` : ''}
+
+    <button class="chip-add" style="border-radius:13px;margin-top:8px" data-act="edit-ouv" data-id="${id}" data-back="${id}">Modifier l'ouvrier</button>`);
+}
+
+/* Donner une avance / payer le reste → crée une dépense payée liée à l'ouvrier */
+function openPayForm(ouvId, solde){
+  const c = compte(ouvId), o = c.o; if(!o.id) return;
+  const reste = Math.max(c.reste, 0);
+  openSheet(`
+    <h2 class="sheet-title">${solde ? 'Payer le reste' : 'Donner une avance'} — ${esc(o.nom)}</h2>
+    <form id="frm" novalidate>
+      <label class="field"><span>Libellé</span><input name="libelle" value="${solde ? 'Solde salaire ' : 'Avance salaire '}${esc(o.nom)}"></label>
+      <label class="field"><span>Montant (${esc(db.devise)})</span><input name="montant" type="number" inputmode="decimal" step="any" required value="${solde ? reste : ''}" placeholder="0"></label>
+      <div class="hint" id="after" style="margin:-4px 0 12px"></div>
+      <div class="field-row">
+        <label class="field"><span>Date</span><input name="date" type="date" value="${todayStr()}"></label>
+        <label class="field"><span>Catégorie</span><select name="cat">${CATS.map(k => `<option ${k === (o.cat || guessCat(o.metier)) ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+      </div>
+      <div class="hint" style="margin:-4px 0 14px">Enregistrée dans Dépenses (payée) et déduite du salaire de ${esc(o.nom)}.</div>
+      <div class="sheet-actions">
+        <button type="button" class="btn ghost" id="back">Retour</button>
+        <button type="submit" class="btn primary">Enregistrer</button>
+      </div>
+    </form>`);
+  const mt = $('#frm [name=montant]'), after = $('#after');
+  const upd = () => {
+    const r = c.reste - (+mt.value || 0);
+    after.innerHTML = r >= -0.005 ? `Après ce paiement, il restera <b>${money(r)}</b> à donner.` : `<b style="color:var(--bad)">⚠️ Dépasse le reste de ${money(-r)}</b>`;
+  };
+  mt.addEventListener('input', upd); upd();
+  $('#back').addEventListener('click', () => openOuvrierDetail(ouvId));
+  $('#frm').addEventListener('submit', e => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    const m = +f.get('montant') || 0;
+    if(m <= 0){ toast('Indiquez un montant'); return; }
+    db.depenses.push({id:uid(), libelle:(f.get('libelle')||'').toString().trim() || 'Avance salaire', cat:f.get('cat'), montant:m, echeance:f.get('date') || '', paye:true, ouvrierId:ouvId});
+    save(); render(true); openOuvrierDetail(ouvId);
+    toast(money(m) + ' versés à ' + o.nom);
+  });
+}
+
+/* Lier les lignes du devis, dépenses et avances à un ouvrier (avec suggestions par nom) */
+function openLinkSheet(ouvId, preselect){
+  const o = ouvById(ouvId); if(!o) return;
+  const item = (key, x, title, sub, amount, sugg) => {
+    const mine = x.ouvrierId === ouvId, other = x.ouvrierId && !mine && ouvById(x.ouvrierId);
+    const checked = mine || (preselect && sugg === 2 && !other);
+    return {sugg: (sugg && !mine && !other) ? sugg : 0, html: `
+      <label class="pick ${other ? 'other' : ''}">
+        <input type="checkbox" data-k="${key}" data-id="${x.id}" ${checked ? 'checked' : ''}>
+        <div class="row-main"><div class="row-title">${esc(title)}</div>
+          <div class="row-sub">${sub}${sugg && !mine && !other ? ' <span class="badge sugg">' + (sugg === 2 ? 'son nom' : 'même métier ?') + '</span>' : ''}${other ? ' · lié à ' + esc(ouvName(x.ouvrierId)) : ''}</div></div>
+        <div class="row-amount">${fmt(amount)}</div>
+      </label>`};
+  };
+  const group = arr => { arr.sort((a,b) => b.sugg - a.sugg); return arr.map(a => a.html).join(''); };
+  const mo  = db.devis.filter(d => d.type === 'mo').map(d => item('devis', d, d.nom, fmt(d.pu) + ' × ' + fmt(d.qte), (+d.pu||0)*(+d.qte||0), suggests(o, d.nom, '', true)));
+  const dep = db.depenses.filter(d => +d.montant > 0).map(d => item('depenses', d, d.libelle, esc(d.cat) + ' · ' + (d.echeance ? dateFr(d.echeance) : 'Sans date') + (d.paye ? '' : ' · non payé'), d.montant, suggests(o, d.libelle, d.cat, false)));
+  const av  = db.avances.map(a => item('avances', a, a.libelle, a.date ? dateFr(a.date) : 'Avance', a.montant, suggests(o, a.libelle, '', false)));
+  const nS = [...mo, ...dep, ...av].filter(a => a.sugg).length;
+  openSheet(`
+    <h2 class="sheet-title" style="margin-bottom:4px">Lier à ${esc(o.nom)}</h2>
+    <div class="hint" style="margin-bottom:6px">Cochez ce qui concerne cet ouvrier. ${nS ? nS + ' élément' + (nS > 1 ? 's' : '') + ' suggéré' + (nS > 1 ? 's' : '') + (preselect ? ' — ceux qui portent son nom sont déjà cochés.' : '.') : ''}</div>
+    ${mo.length ? `<div class="section-head"><h2>Salaire · lignes main d'œuvre du devis</h2></div><div class="list">${group(mo)}</div>` : ''}
+    ${dep.length ? `<div class="section-head"><h2>Avances · dépenses</h2></div><div class="list">${group(dep)}</div>` : ''}
+    ${av.length ? `<div class="section-head"><h2>Avances de paiement (devis)</h2></div><div class="list">${group(av)}</div>` : ''}
+    <div class="sheet-actions" style="position:sticky;bottom:0;background:var(--card);padding-top:10px">
+      <button type="button" class="btn ghost" data-act="open-ouv" data-id="${ouvId}">Annuler</button>
+      <button type="button" class="btn primary" id="saveLinks">Enregistrer</button>
+    </div>`);
+  $('#saveLinks').addEventListener('click', () => {
+    document.querySelectorAll('#sheetContent input[data-k]').forEach(cb => {
+      const x = db[cb.dataset.k].find(y => y.id === cb.dataset.id); if(!x) return;
+      if(cb.checked) x.ouvrierId = ouvId;
+      else if(x.ouvrierId === ouvId) delete x.ouvrierId;
+    });
+    save(); render(true); openOuvrierDetail(ouvId);
+    const c = compte(ouvId);
+    toast('Reste à donner à ' + o.nom + ' : ' + money(Math.max(c.reste, 0)));
+  });
+}
+
+/* Relevé à envoyer à l'ouvrier (WhatsApp, SMS…) */
+function shareReleve(ouvId){
+  const c = compte(ouvId), o = c.o, cur = ' ' + (db.devise || 'DA');
+  const L = [`Relevé de paie — ${o.nom}${o.metier ? ' (' + o.metier + ')' : ''}`, `${db.nom || 'Chantier'} · ${dateFr(todayStr())}`, '',
+    `Salaire convenu : ${fmt(c.D)}${cur}`, ...c.du.map(x => `  • ${x.libelle} : ${fmt(x.montant)}`), '',
+    `Avances reçues : ${fmt(c.V)}${cur}`, ...c.verse.map(x => `  • ${x.date ? dateFr(x.date) + ' — ' : ''}${x.libelle} : ${fmt(x.montant)}`), '',
+    c.reste >= -0.005 ? `RESTE À PAYER : ${fmt(Math.max(c.reste, 0))}${cur}` : `Versé en trop : ${fmt(-c.reste)}${cur}`];
+  const text = L.join('\n');
+  if(navigator.share){ navigator.share({title:'Relevé ' + o.nom, text}).catch(() => {}); return; }
+  if(navigator.clipboard){ navigator.clipboard.writeText(text).then(() => toast('Relevé copié — collez-le dans WhatsApp')).catch(() => window.open('https://wa.me/?text=' + encodeURIComponent(text))); return; }
+  window.open('https://wa.me/?text=' + encodeURIComponent(text));
 }
 
 function afterRender(){
@@ -689,7 +894,7 @@ function removeItem(key, id, label){
   const idx = db[key].findIndex(x => x.id === id);
   if(idx < 0) return;
   const [item] = db[key].splice(idx, 1);
-  save(); closeSheet(); render(true);
+  done();
   toast(label + ' supprimé(e)', () => { db[key].splice(idx, 0, item); save(); render(true); });
 }
 
@@ -706,6 +911,7 @@ function openDepForm(id){
       <label class="field"><span>Montant (${esc(db.devise)})</span>
         <input name="montant" type="number" inputmode="decimal" step="any" required value="${d.montant}" placeholder="0"></label>
       <label class="field"><span>Date d'échéance</span><input name="echeance" type="date" value="${d.echeance||''}"></label>
+      ${ouvSelect(d.ouvrierId)}
       <label class="switch"><input type="checkbox" name="paye" ${d.paye?'checked':''}><span class="track"></span> Marquer comme payé</label>
       <div class="sheet-actions">
         ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
@@ -720,8 +926,9 @@ function openDepForm(id){
       cat: f.get('cat'), montant: +f.get('montant') || 0,
       echeance: f.get('echeance') || '', paye: f.get('paye') === 'on'
     };
+    readOuv(f, obj);
     if(isNew) db.depenses.push({id:uid(), ...obj}); else Object.assign(d, obj);
-    save(); closeSheet(); render(true);
+    done();
   });
   const del = $('#del'); if(del) del.addEventListener('click', () => removeItem('depenses', id, 'Dépense'));
 }
@@ -764,6 +971,7 @@ function openDevisForm(id, type){
         <label class="field"><span>${isMat ? 'Prix unitaire' : 'Montant'}</span><input name="pu" type="number" inputmode="decimal" step="any" required value="${d.pu}" placeholder="0"></label>
         <label class="field"><span>${isMat ? 'Quantité' : 'Nombre'}</span><input name="qte" type="number" inputmode="decimal" step="any" required value="${d.qte}" placeholder="1"></label>
       </div>
+      ${isMat ? '' : ouvSelect(d.ouvrierId)}
       <div class="sheet-actions">
         ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
         <button type="submit" class="btn primary">Enregistrer</button>
@@ -773,8 +981,9 @@ function openDevisForm(id, type){
     e.preventDefault();
     const f = new FormData(e.target);
     const obj = { nom:(f.get('nom')||'').toString().trim() || 'Ligne', pu:+f.get('pu') || 0, qte:+f.get('qte') || 0 };
+    readOuv(f, obj);
     if(isNew) db.devis.push({id:uid(), type:d.type, ...obj}); else Object.assign(d, obj);
-    save(); closeSheet(); render(true);
+    done();
   });
   const del = $('#del'); if(del) del.addEventListener('click', () => removeItem('devis', id, 'Ligne'));
 }
@@ -789,6 +998,7 @@ function openAvanceForm(id){
       <label class="field"><span>Libellé</span><input name="libelle" required value="${esc(a.libelle)}" placeholder="Ex : Acompte maçon"></label>
       <label class="field"><span>Montant (${esc(db.devise)})</span><input name="montant" type="number" inputmode="decimal" step="any" required value="${a.montant}" placeholder="0"></label>
       <label class="field"><span>Date</span><input name="date" type="date" value="${a.date||''}"></label>
+      ${ouvSelect(a.ouvrierId)}
       <div class="sheet-actions">
         ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
         <button type="submit" class="btn primary">Enregistrer</button>
@@ -798,47 +1008,59 @@ function openAvanceForm(id){
     e.preventDefault();
     const f = new FormData(e.target);
     const obj = { libelle:(f.get('libelle')||'').toString().trim() || 'Avance', montant:+f.get('montant') || 0, date:f.get('date') || '' };
+    readOuv(f, obj);
     if(isNew) db.avances.push({id:uid(), ...obj}); else Object.assign(a, obj);
-    save(); closeSheet(); render(true);
+    done();
   });
   const del = $('#del'); if(del) del.addEventListener('click', () => removeItem('avances', id, 'Avance'));
 }
 
 function openOuvrierForm(id){
   const isNew = !id;
-  const o = isNew ? {nom:'', metier:'', tarif:''} : db.ouvriers.find(x => x.id === id);
+  const o = isNew ? {nom:'', metier:'', cat:'', salaire:'', tarif:''} : ouvById(id);
   if(!o) return;
   openSheet(`
     <h2 class="sheet-title">${isNew ? 'Nouvel ouvrier' : "Modifier l'ouvrier"}</h2>
     <form id="frm" novalidate>
-      <label class="field"><span>Nom</span><input name="nom" required value="${esc(o.nom)}" placeholder="Ex : Karim"></label>
+      <label class="field"><span>Nom</span><input name="nom" required value="${esc(o.nom)}" placeholder="Ex : Tarek"></label>
       <label class="field"><span>Métier</span><input name="metier" value="${esc(o.metier)}" placeholder="Ex : Maçon, plaquiste…"></label>
+      <label class="field"><span>Catégorie de ses paiements</span>
+        <select name="cat">${CATS.map(k => `<option ${k === (o.cat || guessCat(o.metier)) ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+      <label class="field"><span>Salaire forfaitaire (${esc(db.devise)}) — facultatif</span>
+        <input name="salaire" type="number" inputmode="decimal" step="any" value="${o.salaire || ''}" placeholder="0"></label>
+      <div class="hint" style="margin:-6px 0 12px">Laissez vide si son salaire vient des lignes « main d'œuvre » du devis : vous pourrez les lier juste après.</div>
       <label class="field"><span>Salaire par jour (${esc(db.devise)}) — facultatif</span>
         <input name="tarif" type="number" inputmode="decimal" step="any" value="${o.tarif || ''}" placeholder="0"></label>
       <div class="sheet-actions">
         ${isNew ? '' : '<button type="button" class="btn danger" id="del">Supprimer</button>'}
-        <button type="submit" class="btn primary">Enregistrer</button>
+        <button type="submit" class="btn primary">${isNew ? 'Suivant' : 'Enregistrer'}</button>
       </div>
     </form>`);
+  const met = $('#frm [name=metier]'), cat = $('#frm [name=cat]');
+  if(isNew) met.addEventListener('input', () => { cat.value = guessCat(met.value); });
   $('#frm').addEventListener('submit', e => {
     e.preventDefault();
     const f = new FormData(e.target);
-    const obj = { nom:(f.get('nom')||'').toString().trim() || 'Ouvrier', metier:(f.get('metier')||'').toString().trim(), tarif:+f.get('tarif') || 0 };
-    let target = id;
-    if(isNew){ target = uid(); db.ouvriers.push({id:target, ...obj}); } else Object.assign(o, obj);
-    save(); render(true); openOuvrierDetail(target);
+    const obj = { nom:(f.get('nom')||'').toString().trim() || 'Ouvrier', metier:(f.get('metier')||'').toString().trim(),
+      cat:f.get('cat') || '', salaire:+f.get('salaire') || 0, tarif:+f.get('tarif') || 0 };
+    if(isNew){ const nid = uid(); db.ouvriers.push({id:nid, ...obj}); save(); render(true); openLinkSheet(nid, true); }
+    else { Object.assign(o, obj); save(); render(true); openOuvrierDetail(id); }
   });
   const del = $('#del'); if(del) del.addEventListener('click', () => removeOuvrier(id));
 }
 
 function removeOuvrier(id){
-  const idx = db.ouvriers.findIndex(x => x.id === id);
-  if(idx < 0) return;
-  const [o] = db.ouvriers.splice(idx, 1);
+  const o = ouvById(id); if(!o) return;
+  if(!confirm('Supprimer ' + o.nom + ' ?\nLes dépenses, lignes du devis et avances restent, elles sont seulement détachées.')) return;
+  snapshot('avant suppression ouvrier', true);
+  const idx = db.ouvriers.indexOf(o);
+  db.ouvriers.splice(idx, 1);
   const mv = db.mouvements.filter(m => m.ouvrierId === id);
   db.mouvements = db.mouvements.filter(m => m.ouvrierId !== id);
+  const linked = [];
+  ['devis','depenses','avances'].forEach(k => db[k].forEach(x => { if(x.ouvrierId === id){ linked.push(x); delete x.ouvrierId; } }));
   save(); closeSheet(); render(true);
-  toast(o.nom + ' supprimé(e)', () => { db.ouvriers.splice(idx, 0, o); db.mouvements.push(...mv); save(); render(true); });
+  toast(o.nom + ' supprimé(e)', () => { db.ouvriers.splice(idx, 0, o); db.mouvements.push(...mv); linked.forEach(x => x.ouvrierId = id); save(); render(true); });
 }
 
 function openMvtForm(ouvId, type, id){
@@ -848,7 +1070,7 @@ function openMvtForm(ouvId, type, id){
   if(!m) return;
   const cr = m.type === 'credit';
   openSheet(`
-    <h2 class="sheet-title">${cr ? (isNew ? 'Salaire dû (crédit)' : 'Modifier le salaire dû') : (isNew ? 'Versement (débit)' : 'Modifier le versement')} — ${esc(o.nom)}</h2>
+    <h2 class="sheet-title">${cr ? (isNew ? 'Ajouter du travail' : 'Modifier le travail') : (isNew ? 'Versement' : 'Modifier le versement')} — ${esc(o.nom)}</h2>
     <form id="frm" novalidate>
       <label class="field"><span>Libellé</span><input name="libelle" value="${esc(m.libelle)}" placeholder="${cr ? 'Ex : Semaine du 12 au 17' : 'Ex : Acompte, solde…'}"></label>
       ${cr ? `<div class="field-row">
@@ -929,8 +1151,12 @@ function download(name, content, type){
 function exportJSON(){ db.lastExport = todayStr(); save(); render(true); download('chantier-' + todayStr() + '.json', JSON.stringify(db, null, 2), 'application/json'); toast('Sauvegarde exportée'); }
 function exportCSV(){
   const q = v => '"' + String(v ?? '').replace(/"/g,'""') + '"';
-  const lines = [['Élément','Catégorie','Montant','Échéance','Payé'].map(q).join(';')];
-  db.depenses.forEach(d => lines.push([d.libelle, d.cat, d.montant, d.echeance, d.paye?'Oui':'Non'].map(q).join(';')));
+  const lines = [['Élément','Catégorie','Montant','Échéance','Payé','Ouvrier'].map(q).join(';')];
+  db.depenses.forEach(d => lines.push([d.libelle, d.cat, d.montant, d.echeance, d.paye?'Oui':'Non', ouvName(d.ouvrierId)].map(q).join(';')));
+  if(db.ouvriers.length){
+    lines.push('', ['Ouvrier','Métier','Salaire convenu','Avances versées','Reste à donner'].map(q).join(';'));
+    db.ouvriers.forEach(o => { const c = compte(o.id); lines.push([o.nom, o.metier, c.D, c.V, c.reste].map(q).join(';')); });
+  }
   download('depenses-' + todayStr() + '.csv', '﻿' + lines.join('\n'), 'text/csv;charset=utf-8');
   toast('CSV exporté (ouvrable dans Excel)');
 }
@@ -961,6 +1187,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
   if(!t) return;
   const act = t.dataset.act, id = t.dataset.id;
+  if(/^edit-/.test(act)) backTo = t.dataset.back || null;
 
   if(act === 'toggle-paid'){
     e.stopPropagation();
@@ -971,9 +1198,9 @@ document.addEventListener('click', e => {
   if(act === 'edit-dep')   openDepForm(id);
   if(act === 'edit-rev')   openRevForm(id);
   if(act === 'edit-devis') openDevisForm(id);
-  if(act === 'add-devis')  openDevisForm(null, t.dataset.type);
+  if(act === 'add-devis'){ backTo = null; openDevisForm(null, t.dataset.type); }
   if(act === 'edit-avance') openAvanceForm(id);
-  if(act === 'add-avance')  openAvanceForm(null);
+  if(act === 'add-avance'){ backTo = null; openAvanceForm(null); }
   if(act === 'restore-auto') restoreAuto(+id);
   if(act === 'open-ouv')   openOuvrierDetail(id);
   if(act === 'add-ouv')    openOuvrierForm(null);
@@ -981,6 +1208,11 @@ document.addEventListener('click', e => {
   if(act === 'add-credit') openMvtForm(t.dataset.ouv, 'credit', null);
   if(act === 'add-debit')  openMvtForm(t.dataset.ouv, 'debit', null);
   if(act === 'edit-mvt')   openMvtForm(t.dataset.ouv, null, id);
+  if(act === 'ouv-pay')    openPayForm(t.dataset.ouv, false);
+  if(act === 'ouv-solde')  openPayForm(t.dataset.ouv, true);
+  if(act === 'ouv-link')   openLinkSheet(t.dataset.ouv, false);
+  if(act === 'ouv-share')  shareReleve(t.dataset.ouv);
+  if(act === 'goto-ouv'){ tab = 'ouv'; render(); }
   if(act === 'goto-dep'){ tab = 'dep'; render(); }
   if(act === 'goto-late'){ tab = 'dep'; filter = 'late'; render(); }
   if(act === 'filter'){ filter = t.dataset.f; render(true); }
@@ -998,6 +1230,7 @@ $('#fab').addEventListener('click', () => {
   if(tab === 'rev')   return openRevForm(null);
   if(tab === 'devis') return openDevisForm(null, 'materiau');
   if(tab === 'ouv')   return openOuvrierForm(null);
+  backTo = null;
   openDepForm(null);
 });
 
@@ -1030,7 +1263,9 @@ document.addEventListener('click', async e => {
 });
 
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(()=>{}));
+  const hadSW = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if(hadSW && !reloaded){ reloaded = true; location.reload(); } });
 }
 
 /* DÉMARRAGE */
